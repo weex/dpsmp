@@ -18,7 +18,11 @@ debug = False
 def main():
     ''' Read CSV and validate each user record, review, and audit'''
     with open(sys.argv[1], 'rb') as csvfile:
-        data = {'users': [], 'sha256sum': hashlib.sha256(csvfile.read()).hexdigest()}
+        h = hashlib.new('ripemd160')
+        h.update(csvfile.read())
+        ripemd160 = h.hexdigest()
+        csvfile.seek(0)
+        data = {'users': [], 'sha256sum': hashlib.sha256(csvfile.read()).hexdigest(), 'ripemd160': ripemd160}
         csvfile.seek(0)
         reader = csv.reader(csvfile, delimiter=',', quotechar='"')
         user_count = 0
@@ -39,7 +43,8 @@ def main():
                 if e != False:
                     (valid, master) = e
 
-                # check review, that it's signed by the active address for a user, and then
+                r = validate_review(review)
+# check review, that it's signed by the active address for a user, and then
                 # do the check above
 
                 # check the audit, 
@@ -58,9 +63,9 @@ def main():
                             + attempt + " needed = " + master
 
                 data['users'].append({'username': row[0],
-                                             'valid': valid,
-                                             'addr_master':  master,
-                                             'signed_by_master': attempt_match})
+                                      'enrollment': valid,
+                                      'addr_master':  master,
+                                      'enrollment_master': attempt_match})
                 user_count += 1
         data['user_count'] = user_count
         print json.dumps(data, indent=4)
