@@ -2,31 +2,50 @@
 '''
 users.py - validate records on a csv download of the users sheet
 '''
-import re, sys, csv
-
+import re, sys, csv, json
+import hashlib
+from validate import *
 # sha256 hash of sheet
 # ripemd hash of sheet
 # count the number of users
 # show how many are reviewed
 # show how many are audited
 # check that reviews and audits were done by at least reviewed users
+# check all of the enrollment signatures and build a list of master and delegated addresses
 
-def validate():
+debug = False
+
+def main():
     ''' Read CSV and validate each user record, review, and audit'''
-    with open('Users - Sheet1.csv', 'rb') as csvfile:
+    with open(sys.argv[1], 'rb') as csvfile:
+        data = {'users': [], 'sha256sum': hashlib.sha256(csvfile.read()).hexdigest()}
+        csvfile.seek(0)
         reader = csv.reader(csvfile, delimiter=',', quotechar='"')
         user_count = 0
         for row in reader:
             if 'Contact' not in row:
-                user_count += 1
+                handle = row[0]
+                address = row[1]
+                enrollment = row[2]
+                review = row[3]
+                audit = row[4]
+
+                valid = False
                 master = ''
                 attempt = ''
 
-                # sift enrollment signature
-                regex = re.search(r"Master signing address:\s+(\w+)", row[2])
-                if regex:
-                    master = regex.group(1)
+                # check enrollment and that it's signed by user's master
+                e = validate_enrollment(enrollment)
+                if e != False:
+                    (valid, master) = e
 
+                # check review, that it's signed by the active address for a user, and then
+                # do the check above
+
+                # check the audit, 
+
+                
+                
                 # check signature address matches master
                 regex = re.search(r"-----BEGIN SIGNATURE-----\r?\n?(\w+)", row[2])
                 if regex:
@@ -34,11 +53,17 @@ def validate():
                 attempt_match = False
                 if attempt == master:
                     attempt_match = True
-                if attempt_match == False:
+                if attempt_match == False and debug:
                     print  row[0] + " did not attempt to sign enrollment with master. used = " \
                             + attempt + " needed = " + master
-                print row[0] + ',' + master + ',' + str(attempt_match)
-        print "Number of users: " + str(user_count)
+
+                data['users'].append({'username': row[0],
+                                             'valid': valid,
+                                             'addr_master':  master,
+                                             'signed_by_master': attempt_match})
+                user_count += 1
+        data['user_count'] = user_count
+        print json.dumps(data, indent=4)
 
 if __name__ == '__main__':
-    sys.exit(validate())
+    sys.exit(main())
